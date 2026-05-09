@@ -1,0 +1,5 @@
+package com.controlpharma.controle_pharma
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
