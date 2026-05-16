@@ -1,13 +1,14 @@
 /// Tableau récapitulatif des prix par niveau de conditionnement
 ///
 /// Affiche pour chaque médicament :
-/// Prix Achat / Prix Vente / Bénéfice par Carton, Boîte, Plaquette, Unité
+/// Prix Achat / Prix Vente / Bénéfice par Carton, Boîte, Plaquette/Flacon, Unité
 library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/medicament.dart';
 import '../providers/controle_provider.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
@@ -34,6 +35,9 @@ class TableauPrixScreen extends StatelessWidget {
             );
           }
 
+          // Déterminer si au moins un médicament a un niveau intermédiaire
+          final hasAnyPlaquette = provider.medicaments.any((m) => m.forme.hasNiveauIntermediaire);
+
           return Column(
             children: [
               // En-tête totaux
@@ -59,35 +63,45 @@ class TableauPrixScreen extends StatelessWidget {
                       dataTextStyle: GoogleFonts.inter(fontSize: 10, color: kTextPrimary),
                       columnSpacing: 12,
                       horizontalMargin: 8,
-                      columns: const [
-                        DataColumn(label: Text('Nom')),
-                        DataColumn(label: Text(kLabelPACarton), numeric: true),
-                        DataColumn(label: Text(kLabelPABoite), numeric: true),
-                        DataColumn(label: Text(kLabelPAPlaquette), numeric: true),
-                        DataColumn(label: Text(kLabelPAUnite), numeric: true),
-                        DataColumn(label: Text(kLabelPVCarton), numeric: true),
-                        DataColumn(label: Text(kLabelPVBoite), numeric: true),
-                        DataColumn(label: Text(kLabelPVPlaquette), numeric: true),
-                        DataColumn(label: Text(kLabelPVUnite), numeric: true),
-                        DataColumn(label: Text(kLabelBenCarton), numeric: true),
-                        DataColumn(label: Text(kLabelBenBoite), numeric: true),
-                        DataColumn(label: Text(kLabelBenPlaquette), numeric: true),
-                        DataColumn(label: Text(kLabelBenUnite), numeric: true),
+                      dataRowMinHeight: 40,
+                      dataRowMaxHeight: 60,
+                      columns: [
+                        const DataColumn(label: Text('Nom')),
+                        const DataColumn(label: Text(kLabelPACarton), numeric: true),
+                        const DataColumn(label: Text(kLabelPABoite), numeric: true),
+                        if (hasAnyPlaquette) const DataColumn(label: Text('PA Plq'), numeric: true),
+                        const DataColumn(label: Text('PA Unit'), numeric: true),
+                        const DataColumn(label: Text(kLabelPVCarton), numeric: true),
+                        const DataColumn(label: Text(kLabelPVBoite), numeric: true),
+                        if (hasAnyPlaquette) const DataColumn(label: Text('PV Plq'), numeric: true),
+                        const DataColumn(label: Text('PV Unit'), numeric: true),
+                        const DataColumn(label: Text(kLabelBenCarton), numeric: true),
+                        const DataColumn(label: Text(kLabelBenBoite), numeric: true),
+                        if (hasAnyPlaquette) const DataColumn(label: Text('Bén Plq'), numeric: true),
+                        const DataColumn(label: Text('Bén Unit'), numeric: true),
                       ],
                       rows: provider.medicaments.map((m) {
+                        final unitLabel = m.forme.uniteLabel;
                         return DataRow(cells: [
-                          DataCell(SizedBox(width: 100, child: Text(m.nom, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontWeight: FontWeight.w500)))),
+                          DataCell(SizedBox(width: 100, child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(m.nom, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+                              Text('${m.forme.emoji} $unitLabel', style: GoogleFonts.inter(fontSize: 8, color: kTextSecondary)),
+                            ],
+                          ))),
                           _numCell(m.prixAchatCarton),
                           _numCell(m.prixAchatBoite),
-                          _numCell(m.prixAchatPlaquette),
+                          if (hasAnyPlaquette) _numCell(m.forme.hasNiveauIntermediaire ? m.prixAchatPlaquette : null),
                           _numCell(m.prixUnitaire),
                           _numCell(m.prixVenteCarton),
                           _numCell(m.prixVenteBoite),
-                          _numCell(m.prixVentePlaquette),
+                          if (hasAnyPlaquette) _numCell(m.forme.hasNiveauIntermediaire ? m.prixVentePlaquette : null),
                           _numCell(m.prixVente),
                           _benCell(m.beneficeParCarton),
                           _benCell(m.beneficeParBoite),
-                          _benCell(m.beneficeParPlaquette),
+                          if (hasAnyPlaquette) _benCell(m.forme.hasNiveauIntermediaire ? m.beneficeParPlaquette : 0),
                           _benCell(m.beneficeParComprime),
                         ]);
                       }).toList(),

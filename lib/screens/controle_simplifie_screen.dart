@@ -25,6 +25,20 @@ extension NiveauControleExt on NiveauControle {
     NiveauControle.carton    => 'Carton',
   };
 
+  /// Label adapté à la forme galénique du médicament
+  String labelPour(FormeGalenique forme) => switch (this) {
+    NiveauControle.comprime  => forme.uniteLabel,
+    NiveauControle.plaquette => forme.intermediaireLabel,
+    NiveauControle.boite     => 'Boîte',
+    NiveauControle.carton    => 'Carton',
+  };
+
+  /// Vérifie si ce niveau est applicable pour une forme donnée
+  bool estApplicable(FormeGalenique forme) => switch (this) {
+    NiveauControle.plaquette => forme.hasNiveauIntermediaire,
+    _ => true,
+  };
+
   IconData get icon => switch (this) {
     NiveauControle.comprime  => Icons.medication_rounded,
     NiveauControle.plaquette => Icons.view_column_rounded,
@@ -42,13 +56,33 @@ class ControleSimplifieScreen extends StatefulWidget {
 
 class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
   final Map<int, TextEditingController> _controllers = {};
-  NiveauControle _niveau = NiveauControle.comprime;
+  final Map<int, NiveauControle> _niveaux = {};
+  final ScrollController _headerScrollCtrl = ScrollController();
+  final ScrollController _bodyScrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Synchroniser le scroll horizontal header ↔ body
+    _headerScrollCtrl.addListener(() {
+      if (_bodyScrollCtrl.hasClients && _bodyScrollCtrl.offset != _headerScrollCtrl.offset) {
+        _bodyScrollCtrl.jumpTo(_headerScrollCtrl.offset);
+      }
+    });
+    _bodyScrollCtrl.addListener(() {
+      if (_headerScrollCtrl.hasClients && _headerScrollCtrl.offset != _bodyScrollCtrl.offset) {
+        _headerScrollCtrl.jumpTo(_bodyScrollCtrl.offset);
+      }
+    });
+  }
 
   @override
   void dispose() {
     for (final c in _controllers.values) {
       c.dispose();
     }
+    _headerScrollCtrl.dispose();
+    _bodyScrollCtrl.dispose();
     super.dispose();
   }
 
@@ -57,12 +91,18 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
     return _controllers[index]!;
   }
 
+  NiveauControle _getNiveau(int index, Medicament med) {
+    // Par défaut : unité de base de la forme
+    _niveaux[index] ??= NiveauControle.comprime;
+    return _niveaux[index]!;
+  }
+
   /// Nombre d'unités par niveau pour un médicament donné
-  int _unitesParNiveau(Medicament med) {
+  int _unitesParNiveau(Medicament med, NiveauControle niveau) {
     final uPlq = med.unitesParPlaquette ?? 1;
     final plqBte = med.plaquettesParBoite ?? 1;
     final bteCrt = med.boitesParCarton ?? 1;
-    return switch (_niveau) {
+    return switch (niveau) {
       NiveauControle.comprime  => 1,
       NiveauControle.plaquette => uPlq,
       NiveauControle.boite     => uPlq * plqBte,
@@ -71,14 +111,14 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
   }
 
   /// Stock initial converti au niveau choisi
-  int _stockInitialNiveau(Medicament med) {
-    final diviseur = _unitesParNiveau(med);
+  int _stockInitialNiveau(Medicament med, NiveauControle niveau) {
+    final diviseur = _unitesParNiveau(med, niveau);
     return diviseur > 0 ? med.quantiteInitiale ~/ diviseur : med.quantiteInitiale;
   }
 
   /// Prix de vente unitaire au niveau choisi
-  double _prixVenteNiveau(Medicament med) {
-    return switch (_niveau) {
+  double _prixVenteNiveau(Medicament med, NiveauControle niveau) {
+    return switch (niveau) {
       NiveauControle.comprime  => _bestPV(med),
       NiveauControle.plaquette => med.prixVentePlaquette ?? _bestPV(med) * (med.unitesParPlaquette ?? 1),
       NiveauControle.boite     => med.prixVenteBoite ?? _bestPV(med) * (med.unitesParPlaquette ?? 1) * (med.plaquettesParBoite ?? 1),
@@ -87,8 +127,8 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
   }
 
   /// Prix d'achat unitaire au niveau choisi
-  double _prixAchatNiveau(Medicament med) {
-    return switch (_niveau) {
+  double _prixAchatNiveau(Medicament med, NiveauControle niveau) {
+    return switch (niveau) {
       NiveauControle.comprime  => _bestPA(med),
       NiveauControle.plaquette => med.prixAchatPlaquette ?? _bestPA(med) * (med.unitesParPlaquette ?? 1),
       NiveauControle.boite     => med.prixAchatBoite ?? _bestPA(med) * (med.unitesParPlaquette ?? 1) * (med.plaquettesParBoite ?? 1),
@@ -124,16 +164,6 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
     return 0;
   }
 
-  /// Vider les controllers quand on change de niveau
-  void _onNiveauChanged(NiveauControle n) {
-    setState(() {
-      _niveau = n;
-      for (final c in _controllers.values) {
-        c.clear();
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,13 +190,14 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
           for (int i = 0; i < provider.medicaments.length; i++) {
             final m = provider.medicaments[i];
             final ctrl = _getCtrl(i);
+            final niv = _getNiveau(i, m);
             final restant = int.tryParse(ctrl.text);
             if (restant != null) {
-              final stockNiv = _stockInitialNiveau(m);
+              final stockNiv = _stockInitialNiveau(m, niv);
               final vendus = stockNiv - restant;
               final qv = vendus > 0 ? vendus : 0;
-              final pvN = _prixVenteNiveau(m);
-              final paN = _prixAchatNiveau(m);
+              final pvN = _prixVenteNiveau(m, niv);
+              final paN = _prixAchatNiveau(m, niv);
               totalVendus += qv;
               totalPV += qv * pvN;
               totalBen += qv * (pvN - paN);
@@ -175,74 +206,28 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
 
           return Column(
             children: [
-              // Sélecteur de niveau
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: kPaddingM, vertical: 10),
-                color: kPrimaryColor.withAlpha(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Niveau de contrôle :',
-                      style: GoogleFonts.inter(fontSize: kFontSizeS, color: kPrimaryColor, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: NiveauControle.values.map((n) {
-                        final selected = _niveau == n;
-                        return Expanded(
-                          child: GestureDetector(
-                            onTap: () => _onNiveauChanged(n),
-                            child: Container(
-                              margin: EdgeInsets.only(right: n != NiveauControle.carton ? 6 : 0),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: selected ? kPrimaryColor : Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: selected ? kPrimaryColor : kBorderColor,
-                                  width: selected ? 2 : 1,
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  Icon(n.icon, size: 16, color: selected ? Colors.white : kTextSecondary),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    n.label,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: selected ? Colors.white : kTextSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
-              ),
 
               // Tableau header
-              Container(
-                color: kPrimaryColor.withAlpha(20),
-                padding: const EdgeInsets.symmetric(horizontal: kPaddingS, vertical: kPaddingS),
-                child: Row(
-                  children: [
-                    _headerCell('Médicament', flex: 3),
-                    _headerCell('Stock\n(${_niveau.label})', flex: 2),
-                    _headerCell('PA\n(${_niveau.label})', flex: 2),
-                    _headerCell('PV\n(${_niveau.label})', flex: 2),
-                    _headerCell('Restant', flex: 2),
-                    _headerCell('Vendus', flex: 1),
-                    _headerCell('PV Total', flex: 2),
-                    _headerCell('Bénéfice', flex: 2),
-                  ],
+              SingleChildScrollView(
+                controller: _headerScrollCtrl,
+                scrollDirection: Axis.horizontal,
+                child: Container(
+                  width: 820,
+                  color: kPrimaryColor.withAlpha(20),
+                  padding: const EdgeInsets.symmetric(horizontal: kPaddingS, vertical: kPaddingS),
+                  child: Row(
+                    children: [
+                      _headerCell('Médicament', flex: 3),
+                      _headerCell('Date', flex: 2),
+                      _headerCell('Stock', flex: 2),
+                      _headerCell('PA', flex: 2),
+                      _headerCell('PV', flex: 2),
+                      _headerCell('Restant', flex: 2),
+                      _headerCell('Vendus', flex: 1),
+                      _headerCell('PV Total', flex: 2),
+                      _headerCell('Bénéfice', flex: 2),
+                    ],
+                  ),
                 ),
               ),
 
@@ -278,222 +263,278 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
                       }
                     }
 
-                    return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: kPaddingXS),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => Divider(height: 1, color: kBorderColor),
-                      itemBuilder: (context, itemIdx) {
-                        final item = items[itemIdx];
+                    return SingleChildScrollView(
+                      controller: _bodyScrollCtrl,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: 820,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: kPaddingXS),
+                          itemCount: items.length,
+                          separatorBuilder: (_, __) => Divider(height: 1, color: kBorderColor),
+                          itemBuilder: (context, itemIdx) {
+                            final item = items[itemIdx];
 
-                        // === EN-TÊTE DE GROUPE ===
-                        if (item.type == 'header') {
-                          final firstMed = allMeds[item.medIndex];
-                          int groupQI = 0;
-                          for (final idx in item.groupIndices) {
-                            groupQI += _stockInitialNiveau(allMeds[idx]);
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                              decoration: BoxDecoration(
-                                color: kPrimaryColor.withAlpha(15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: Row(children: [
-                                      Expanded(child: Text(
-                                        firstMed.nom,
-                                        style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w700, color: kPrimaryDarkColor),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      )),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                        decoration: BoxDecoration(color: Colors.deepPurple.withAlpha(20), borderRadius: BorderRadius.circular(4)),
-                                        child: Text('${item.groupIndices.length} lots', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: Colors.deepPurple)),
+                            // === EN-TÊTE DE GROUPE ===
+                            if (item.type == 'header') {
+                              final firstMed = allMeds[item.medIndex];
+                              int groupQI = 0;
+                              for (final idx in item.groupIndices) {
+                                final niv = _getNiveau(idx, allMeds[idx]);
+                                groupQI += _stockInitialNiveau(allMeds[idx], niv);
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                                  decoration: BoxDecoration(
+                                    color: kPrimaryColor.withAlpha(15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 3,
+                                        child: Row(children: [
+                                          Expanded(child: Text(
+                                            firstMed.nom,
+                                            style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w700, color: kPrimaryDarkColor),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          )),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(color: Colors.deepPurple.withAlpha(20), borderRadius: BorderRadius.circular(4)),
+                                            child: Text('${item.groupIndices.length} lots', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w600, color: Colors.deepPurple)),
+                                          ),
+                                        ]),
                                       ),
-                                    ]),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Center(
-                                      child: Text('$groupQI', style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w700, color: kPrimaryDarkColor)),
-                                    ),
-                                  ),
-                                  const Expanded(flex: 2, child: SizedBox()),
-                                  const Expanded(flex: 2, child: SizedBox()),
-                                  const Expanded(flex: 2, child: SizedBox()),
-                                  const Expanded(flex: 1, child: SizedBox()),
-                                  const Expanded(flex: 2, child: SizedBox()),
-                                  const Expanded(flex: 2, child: SizedBox()),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        // === LOT INDIVIDUEL ou MÉDICAMENT SEUL ===
-                        final index = item.medIndex;
-                        final med = allMeds[index];
-                        final ctrl = _getCtrl(index);
-                        final isLot = item.type == 'lot';
-
-                        final stockNiv = _stockInitialNiveau(med);
-                        final restant = int.tryParse(ctrl.text);
-                        final hasInput = restant != null;
-                        final vendus = hasInput ? (stockNiv - restant) : 0;
-                        final qVendus = vendus > 0 ? vendus : 0;
-                        final pvN = _prixVenteNiveau(med);
-                        final paN = _prixAchatNiveau(med);
-                        final pvVente = qVendus * pvN;
-                        final benefice = qVendus * (pvN - paN);
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Container(
-                            color: isLot ? Colors.deepPurple.withAlpha(6) : null,
-                            child: Row(
-                            children: [
-                              // Nom
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    isLot
-                                      ? Row(children: [
-                                          Text('  ↳ ', style: GoogleFonts.inter(fontSize: 10, color: Colors.deepPurple)),
-                                          Text('Lot ${item.lotNum}', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500, color: Colors.deepPurple)),
-                                        ])
-                                      : Text(
-                                          med.nom,
-                                          style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                      const Expanded(flex: 2, child: SizedBox()), // Date vide
+                                      Expanded(
+                                        flex: 2,
+                                        child: Center(
+                                          child: Text('$groupQI', style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w700, color: kPrimaryDarkColor)),
                                         ),
-                                    Row(children: [
-                                      if (isLot) const SizedBox(width: 16),
-                                      Text(med.forme.label, style: GoogleFonts.inter(fontSize: 9, color: kTextSecondary)),
-                                      if (med.dateEntreeStock != null) ...[
-                                        const SizedBox(width: 4),
-                                        Text('• ${med.dateEntreeStock!.day.toString().padLeft(2, '0')}/${med.dateEntreeStock!.month.toString().padLeft(2, '0')}', style: GoogleFonts.inter(fontSize: 8, color: kTextSecondary)),
-                                      ],
-                                    ]),
+                                      ),
+                                      const Expanded(flex: 2, child: SizedBox()),
+                                      const Expanded(flex: 2, child: SizedBox()),
+                                      const Expanded(flex: 2, child: SizedBox()),
+                                      const Expanded(flex: 1, child: SizedBox()),
+                                      const Expanded(flex: 2, child: SizedBox()),
+                                      const Expanded(flex: 2, child: SizedBox()),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+
+                            // === LOT INDIVIDUEL ou MÉDICAMENT SEUL ===
+                            final index = item.medIndex;
+                            final med = allMeds[index];
+                            final ctrl = _getCtrl(index);
+                            final isLot = item.type == 'lot';
+                            final niveau = _getNiveau(index, med);
+
+                            final stockNiv = _stockInitialNiveau(med, niveau);
+                            final restant = int.tryParse(ctrl.text);
+                            final hasInput = restant != null;
+                            final vendus = hasInput ? (stockNiv - restant) : 0;
+                            final qVendus = vendus > 0 ? vendus : 0;
+                            final pvN = _prixVenteNiveau(med, niveau);
+                            final paN = _prixAchatNiveau(med, niveau);
+                            final pvVente = qVendus * pvN;
+                            final benefice = qVendus * (pvN - paN);
+
+                            // Niveaux applicables pour ce médicament
+                            final niveauxDispo = NiveauControle.values.where((n) => n.estApplicable(med.forme)).toList();
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Container(
+                                color: isLot ? Colors.deepPurple.withAlpha(6) : null,
+                                child: Column(
+                                  children: [
+                                    Row(
+                                    children: [
+                                      // Nom + mini chips de niveau
+                                      Expanded(
+                                        flex: 3,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            isLot
+                                              ? Row(children: [
+                                                  Text('  ↳ ', style: GoogleFonts.inter(fontSize: 10, color: Colors.deepPurple)),
+                                                  Text('Lot ${item.lotNum}', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500, color: Colors.deepPurple)),
+                                                ])
+                                              : Text(
+                                                  med.nom,
+                                                  style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                            const SizedBox(height: 2),
+                                            // Mini chips de niveau par médicament
+                                            Wrap(spacing: 3, runSpacing: 2, children: [
+                                              if (isLot) const SizedBox(width: 16),
+                                              ...niveauxDispo.map((n) {
+                                                final sel = niveau == n;
+                                                final lbl = n.labelPour(med.forme);
+                                                return GestureDetector(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _niveaux[index] = n;
+                                                      _controllers[index]?.clear();
+                                                    });
+                                                  },
+                                                  child: Container(
+                                                    margin: const EdgeInsets.only(right: 3),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: sel ? kPrimaryColor : Colors.grey.withAlpha(20),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                      border: Border.all(color: sel ? kPrimaryColor : kBorderColor, width: 0.5),
+                                                    ),
+                                                    child: Text(
+                                                      lbl,
+                                                      style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: sel ? Colors.white : kTextSecondary),
+                                                    ),
+                                                  ),
+                                                );
+                                              }),
+                                            ]),
+                                          ],
+                                        ),
+                                      ),
+                                      // Date
+                                      Expanded(
+                                        flex: 2,
+                                        child: Center(
+                                          child: Text(
+                                            med.dateEntreeStock != null
+                                              ? '${med.dateEntreeStock!.day.toString().padLeft(2, '0')}/${med.dateEntreeStock!.month.toString().padLeft(2, '0')}/${med.dateEntreeStock!.year.toString().substring(2)}'
+                                              : '-',
+                                            style: GoogleFonts.inter(fontSize: 9, color: kTextSecondary),
+                                          ),
+                                        ),
+                                      ),
+                                      // Stock initial au niveau
+                                      Expanded(
+                                        flex: 2,
+                                        child: Center(
+                                          child: Text('$stockNiv', style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600, color: kTextPrimary)),
+                                        ),
+                                      ),
+                                      // PA
+                                      Expanded(
+                                        flex: 2,
+                                        child: Center(
+                                          child: Text(formatNumber(paN), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.orange.shade700)),
+                                        ),
+                                      ),
+                                      // PV
+                                      Expanded(
+                                        flex: 2,
+                                        child: Center(
+                                          child: Text(formatNumber(pvN), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: kPrimaryColor)),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: SizedBox(
+                                          height: 36,
+                                          child: TextFormField(
+                                            controller: ctrl,
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                            textAlign: TextAlign.center,
+                                            style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600),
+                                            decoration: InputDecoration(
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                              isDense: true,
+                                              hintText: '$stockNiv',
+                                              hintStyle: GoogleFonts.inter(fontSize: kFontSizeS, color: kTextSecondary.withAlpha(80)),
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(6),
+                                                borderSide: const BorderSide(color: kPrimaryColor, width: 2),
+                                              ),
+                                            ),
+                                            onChanged: (val) {
+                                              final stock = int.tryParse(val);
+                                              if (stock != null) {
+                                                final unites = stock * _unitesParNiveau(med, niveau);
+                                                provider.mettreAJourStockReel(index, unites);
+                                              }
+                                              setState(() {});
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      // Q.Vendues
+                                      Expanded(
+                                        flex: 1,
+                                        child: Center(
+                                          child: Text(
+                                            hasInput ? '$qVendus' : '-',
+                                            style: GoogleFonts.inter(
+                                              fontSize: kFontSizeS,
+                                              fontWeight: FontWeight.w600,
+                                              color: qVendus > 0 ? Colors.orange.shade700 : kTextSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // PV Total
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          hasInput ? formatNumber(pvVente) : '-',
+                                          textAlign: TextAlign.right,
+                                          style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600, color: kPrimaryColor),
+                                        ),
+                                      ),
+                                      // Bénéfice
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          hasInput ? formatNumber(benefice) : '-',
+                                          textAlign: TextAlign.right,
+                                          style: GoogleFonts.inter(
+                                            fontSize: kFontSizeS,
+                                            fontWeight: FontWeight.w700,
+                                            color: benefice >= 0 ? kSuccessColor : kDangerColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   ],
                                 ),
                               ),
-                              // Stock initial au niveau
-                              Expanded(
-                                flex: 2,
-                                child: Center(
-                                  child: Text('$stockNiv', style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600, color: kTextPrimary)),
-                                ),
-                              ),
-                              // PA
-                              Expanded(
-                                flex: 2,
-                                child: Center(
-                                  child: Text(formatNumber(paN), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.orange.shade700)),
-                                ),
-                              ),
-                              // PV
-                              Expanded(
-                                flex: 2,
-                                child: Center(
-                                  child: Text(formatNumber(pvN), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: kPrimaryColor)),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: SizedBox(
-                                  height: 36,
-                                  child: TextFormField(
-                                    controller: ctrl,
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600),
-                                    decoration: InputDecoration(
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                      isDense: true,
-                                      hintText: '$stockNiv',
-                                      hintStyle: GoogleFonts.inter(fontSize: kFontSizeS, color: kTextSecondary.withAlpha(80)),
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                        borderSide: const BorderSide(color: kPrimaryColor, width: 2),
-                                      ),
-                                    ),
-                                    onChanged: (val) {
-                                      final stock = int.tryParse(val);
-                                      if (stock != null) {
-                                        final unites = stock * _unitesParNiveau(med);
-                                        provider.mettreAJourStockReel(index, unites);
-                                      }
-                                      setState(() {});
-                                    },
-                                  ),
-                                ),
-                              ),
-                              // Q.Vendues
-                              Expanded(
-                                flex: 1,
-                                child: Center(
-                                  child: Text(
-                                    hasInput ? '$qVendus' : '-',
-                                    style: GoogleFonts.inter(
-                                      fontSize: kFontSizeS,
-                                      fontWeight: FontWeight.w600,
-                                      color: qVendus > 0 ? Colors.orange.shade700 : kTextSecondary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // PV Total
-                              Expanded(
-                                flex: 2,
-                                child: Text(
-                                  hasInput ? formatNumber(pvVente) : '-',
-                                  textAlign: TextAlign.right,
-                                  style: GoogleFonts.inter(fontSize: kFontSizeS, fontWeight: FontWeight.w600, color: kPrimaryColor),
-                                ),
-                              ),
-                              // Bénéfice
-                              Expanded(
-                                flex: 2,
-                                child: Text(
-                                  hasInput ? formatNumber(benefice) : '-',
-                                  textAlign: TextAlign.right,
-                                  style: GoogleFonts.inter(
-                                    fontSize: kFontSizeS,
-                                    fontWeight: FontWeight.w700,
-                                    color: benefice >= 0 ? kSuccessColor : kDangerColor,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          ),
-                        );
-                      },
+                            );
+                          },
+                        ),
+                      ),
                     );
                   },
                 ),
               ),
 
               // Totaux
-              Container(
-                padding: const EdgeInsets.all(kPaddingM),
-                decoration: BoxDecoration(
-                  color: kPrimaryColor.withAlpha(15),
-                  border: Border(top: BorderSide(color: kPrimaryColor.withAlpha(50), width: 2)),
-                ),
-                child: Column(
-                  children: [
+              Flexible(
+                child: SingleChildScrollView(
+                  child: SafeArea(
+                    top: false,
+                    child: Container(
+                      padding: const EdgeInsets.all(kPaddingS),
+                      decoration: BoxDecoration(
+                        color: kPrimaryColor.withAlpha(15),
+                        border: Border(top: BorderSide(color: kPrimaryColor.withAlpha(50), width: 2)),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                     Row(
                       children: [
                         const Icon(Icons.summarize_rounded, color: kPrimaryColor, size: 18),
@@ -501,7 +542,7 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
                         Text('TOTAUX', style: GoogleFonts.inter(fontSize: kFontSizeM, fontWeight: FontWeight.w800, color: kPrimaryDarkColor)),
                         const Spacer(),
                         Text(
-                          'En ${_niveau.label.toLowerCase()}s',
+                          'Par médicament',
                           style: GoogleFonts.inter(fontSize: kFontSizeXS, color: kTextSecondary, fontWeight: FontWeight.w500),
                         ),
                       ],
@@ -582,9 +623,12 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
                           ),
                         ),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
+            ),
+          ),
             ],
           );
         },
@@ -751,9 +795,9 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
   }
 
   void _confirmerNouveauControle(BuildContext context, ControleProvider provider) {
-    // Compter les médicaments avec stock réel saisi
     final nbAvecStock = provider.medicaments.where((m) => m.stockReel != null).length;
     final nbTotal = provider.medicaments.length;
+    final titreCtrl = TextEditingController(text: 'Contrôle ${provider.controles.length + 1}');
 
     showDialog(
       context: context,
@@ -768,9 +812,21 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Un nouveau contrôle sera créé à partir du stock réel actuel.',
-              style: GoogleFonts.inter(fontSize: kFontSizeM),
+            TextFormField(
+              controller: titreCtrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Nom du contrôle',
+                hintText: 'Ex: Contrôle Mai 2026',
+                prefixIcon: const Icon(Icons.edit_rounded, size: 20),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: kPrimaryColor, width: 2),
+                ),
+              ),
+              style: GoogleFonts.inter(fontSize: kFontSizeM, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Container(
@@ -806,7 +862,9 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
           ElevatedButton.icon(
             onPressed: () async {
               Navigator.pop(ctx);
-              final ok = await provider.creerNouveauControleDepuisPrecedent();
+              final ok = await provider.creerNouveauControleDepuisPrecedent(
+                titre: titreCtrl.text,
+              );
               if (context.mounted) {
                 if (ok) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(

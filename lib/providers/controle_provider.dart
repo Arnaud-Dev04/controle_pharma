@@ -384,7 +384,7 @@ class ControleProvider extends ChangeNotifier {
   /// Crée un nouveau contrôle basé sur les résultats du contrôle validé.
   /// Le stockReel de chaque médicament devient la nouvelle quantitéInitiale.
   /// Si stockReel n'est pas saisi, on utilise quantiteRestante.
-  Future<bool> creerNouveauControleDepuisPrecedent() async {
+  Future<bool> creerNouveauControleDepuisPrecedent({required String titre}) async {
     if (_controleActuel == null || _pharmacieId == null) return false;
     if (_controleActuel!.statut != 'termine') return false;
 
@@ -393,7 +393,7 @@ class ControleProvider extends ChangeNotifier {
 
     // Créer un nouveau contrôle
     final controle = Controle(
-      titre: 'Inventaire',
+      titre: titre.trim().isEmpty ? 'Inventaire' : titre.trim(),
       pharmacieId: _pharmacieId,
       dateCreation: DateTime.now(),
     );

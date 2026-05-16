@@ -28,6 +28,46 @@ enum FormeGalenique {
   final String emoji;
   const FormeGalenique(this.label, this.emoji);
 
+  /// Label de l'unité élémentaire (comprimé, flacon, tube, ampoule…)
+  String get uniteLabel => switch (this) {
+    FormeGalenique.comprime     => 'Comprimé',
+    FormeGalenique.gelule       => 'Gélule',
+    FormeGalenique.sirop        => 'Flacon',
+    FormeGalenique.injectable   => 'Ampoule',
+    FormeGalenique.pommade      => 'Tube',
+    FormeGalenique.suppositoire => 'Suppositoire',
+    FormeGalenique.collyre      => 'Flacon',
+    FormeGalenique.sachet       => 'Sachet',
+    FormeGalenique.suspension   => 'Flacon',
+    FormeGalenique.ovule        => 'Ovule',
+    FormeGalenique.autre        => 'Unité',
+  };
+
+  /// Label du niveau intermédiaire (plaquette pour comprimés, pas applicable pour liquides)
+  String get intermediaireLabel => switch (this) {
+    FormeGalenique.comprime     => 'Plaquette',
+    FormeGalenique.gelule       => 'Plaquette',
+    FormeGalenique.suppositoire => 'Plaquette',
+    FormeGalenique.ovule        => 'Plaquette',
+    _                           => 'Boîte',
+  };
+
+  /// Indique si la forme utilise le niveau intermédiaire (plaquette)
+  /// Les liquides et semi-solides n'ont pas de plaquette
+  bool get hasNiveauIntermediaire => switch (this) {
+    FormeGalenique.comprime     => true,
+    FormeGalenique.gelule       => true,
+    FormeGalenique.suppositoire => true,
+    FormeGalenique.ovule        => true,
+    _                           => false,
+  };
+
+  /// Label pour le champ "unités par plaquette" adapté à la forme
+  /// Ex: "Comprimés par plaquette" ou "Flacons par boîte"
+  String get unitesParIntermediaireLabel => hasNiveauIntermediaire
+    ? '${uniteLabel}s par plaquette'
+    : '${uniteLabel}s par boîte';
+
   /// Trouve une forme par son nom stocké en BDD
   static FormeGalenique fromString(String? value) {
     if (value == null) return FormeGalenique.comprime;
@@ -231,11 +271,18 @@ class Medicament {
     if (boitesParCarton != null && boitesParCarton! > 0) {
       parts.add('$boitesParCarton bte');
     }
-    if (plaquettesParBoite != null && plaquettesParBoite! > 0) {
-      parts.add('$plaquettesParBoite plq');
-    }
-    if (unitesParPlaquette != null && unitesParPlaquette! > 0) {
-      parts.add('$unitesParPlaquette u');
+    if (forme.hasNiveauIntermediaire) {
+      if (plaquettesParBoite != null && plaquettesParBoite! > 0) {
+        parts.add('$plaquettesParBoite ${forme.intermediaireLabel.substring(0, 3).toLowerCase()}');
+      }
+      if (unitesParPlaquette != null && unitesParPlaquette! > 0) {
+        parts.add('$unitesParPlaquette ${forme.uniteLabel.substring(0, 3).toLowerCase()}');
+      }
+    } else {
+      // Pour liquides/semi-solides : plaquettesParBoite = unités par boîte
+      if (plaquettesParBoite != null && plaquettesParBoite! > 0) {
+        parts.add('$plaquettesParBoite ${forme.uniteLabel.substring(0, 3).toLowerCase()}');
+      }
     }
     return parts.isEmpty ? 'Quantité directe' : parts.join(' × ');
   }

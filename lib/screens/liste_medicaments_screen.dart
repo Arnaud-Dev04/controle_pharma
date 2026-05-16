@@ -27,15 +27,20 @@ class ListeMedicamentsScreen extends StatefulWidget {
 
 class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
   String _searchQuery = '';
-  NiveauControle _niveau = NiveauControle.comprime;
+  final Map<int, NiveauControle> _niveaux = {};
+
+  NiveauControle _getNiveau(int realIndex, Medicament med) {
+    _niveaux[realIndex] ??= NiveauControle.comprime;
+    return _niveaux[realIndex]!;
+  }
 
   // ── Prix avec source ──
   /// Retourne (prix, estDirect) pour PA au niveau sélectionné
-  (double, bool) _paNiveauSrc(Medicament med) {
+  (double, bool) _paNiveauSrc(Medicament med, NiveauControle niveau) {
     final u = med.unitesParPlaquette ?? 1;
     final p = med.plaquettesParBoite ?? 1;
     final b = med.boitesParCarton ?? 1;
-    return switch (_niveau) {
+    return switch (niveau) {
       NiveauControle.comprime  => (med.prixUnitaire > 0 ? med.prixUnitaire : _bestPA(med), med.prixUnitaire > 0),
       NiveauControle.plaquette => (med.prixAchatPlaquette ?? _bestPA(med) * u, med.prixAchatPlaquette != null),
       NiveauControle.boite     => (med.prixAchatBoite ?? _bestPA(med) * u * p, med.prixAchatBoite != null),
@@ -43,11 +48,11 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
     };
   }
 
-  (double, bool) _pvNiveauSrc(Medicament med) {
+  (double, bool) _pvNiveauSrc(Medicament med, NiveauControle niveau) {
     final u = med.unitesParPlaquette ?? 1;
     final p = med.plaquettesParBoite ?? 1;
     final b = med.boitesParCarton ?? 1;
-    return switch (_niveau) {
+    return switch (niveau) {
       NiveauControle.comprime  => (med.prixVente > 0 ? med.prixVente : _bestPV(med), med.prixVente > 0),
       NiveauControle.plaquette => (med.prixVentePlaquette ?? _bestPV(med) * u, med.prixVentePlaquette != null),
       NiveauControle.boite     => (med.prixVenteBoite ?? _bestPV(med) * u * p, med.prixVenteBoite != null),
@@ -55,11 +60,28 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
     };
   }
 
-  int _qteNiveau(Medicament med) {
+  /// Quantité au niveau choisi — utilise stockReel si disponible
+  /// (= stock mis à jour après contrôle), sinon quantiteInitiale
+  int _qteNiveau(Medicament med, NiveauControle niveau) {
     final u = med.unitesParPlaquette ?? 1;
     final p = med.plaquettesParBoite ?? 1;
     final b = med.boitesParCarton ?? 1;
-    final div = switch (_niveau) {
+    final div = switch (niveau) {
+      NiveauControle.comprime  => 1,
+      NiveauControle.plaquette => u,
+      NiveauControle.boite     => u * p,
+      NiveauControle.carton    => u * p * b,
+    };
+    final stock = med.stockReel ?? med.quantiteInitiale;
+    return div > 0 ? stock ~/ div : 0;
+  }
+
+  /// Quantité initiale au niveau choisi (toujours quantiteInitiale)
+  int _qteInitNiveau(Medicament med, NiveauControle niveau) {
+    final u = med.unitesParPlaquette ?? 1;
+    final p = med.plaquettesParBoite ?? 1;
+    final b = med.boitesParCarton ?? 1;
+    final div = switch (niveau) {
       NiveauControle.comprime  => 1,
       NiveauControle.plaquette => u,
       NiveauControle.boite     => u * p,
@@ -124,10 +146,13 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
 
           // Totaux
           double totalPA = 0, totalPV = 0, totalPVTotal = 0, totalBen = 0;
-          for (final m in meds) {
-            final (pa, _) = _paNiveauSrc(m);
-            final (pv, _) = _pvNiveauSrc(m);
-            final qte = _qteNiveau(m);
+          for (int i = 0; i < meds.length; i++) {
+            final m = meds[i];
+            final realIdx = provider.medicaments.indexOf(m);
+            final niv = _getNiveau(realIdx, m);
+            final (pa, _) = _paNiveauSrc(m, niv);
+            final (pv, _) = _pvNiveauSrc(m, niv);
+            final qte = _qteNiveau(m, niv);
             totalPA += pa * qte;
             totalPV += pv * qte;
             totalPVTotal += pv * qte;
@@ -153,36 +178,6 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                     style: GoogleFonts.inter(fontSize: kFontSizeS),
                   ),
                 ),
-
-              // Sélecteur de niveau
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: kPaddingS, vertical: 8),
-                color: kPrimaryColor.withAlpha(8),
-                child: Row(
-                  children: [
-                    Text('Niveau : ', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: kPrimaryColor)),
-                    ...NiveauControle.values.map((n) {
-                      final sel = _niveau == n;
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _niveau = n),
-                          child: Container(
-                            margin: const EdgeInsets.only(left: 4),
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            decoration: BoxDecoration(
-                              color: sel ? kPrimaryColor : Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: sel ? kPrimaryColor : kBorderColor, width: sel ? 2 : 1),
-                            ),
-                            child: Center(child: Text(n.label, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: sel ? Colors.white : kTextSecondary))),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
 
               // Légende source prix
               Container(
@@ -233,16 +228,18 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                       dataTextStyle: GoogleFonts.inter(fontSize: 10, color: kTextPrimary),
                       columnSpacing: 12,
                       horizontalMargin: 8,
-                      columns: [
-                        const DataColumn(label: Text('N°')),
-                        const DataColumn(label: Text('Nom')),
-                        const DataColumn(label: Text('Date')),
-                        DataColumn(label: Text('Qté\n(${_niveau.label})'), numeric: true),
-                        DataColumn(label: Text('P.A\n(${_niveau.label})'), numeric: true),
-                        DataColumn(label: Text('P.V\n(${_niveau.label})'), numeric: true),
-                        const DataColumn(label: Text('PV Total'), numeric: true),
-                        const DataColumn(label: Text('Bénéfice'), numeric: true),
-                        const DataColumn(label: Text('')),
+                      dataRowMinHeight: 48,
+                      dataRowMaxHeight: 72,
+                      columns: const [
+                        DataColumn(label: Text('N°')),
+                        DataColumn(label: Text('Nom')),
+                        DataColumn(label: Text('Date')),
+                        DataColumn(label: Text('Stock'), numeric: true),
+                        DataColumn(label: Text('P.A'), numeric: true),
+                        DataColumn(label: Text('P.V'), numeric: true),
+                        DataColumn(label: Text('PV Total'), numeric: true),
+                        DataColumn(label: Text('Bénéfice'), numeric: true),
+                        DataColumn(label: Text('')),
                       ],
                       rows: [
                         ...() {
@@ -272,9 +269,11 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                             int groupQte = 0;
                             for (final idx in indices) {
                               final m = meds[idx];
-                              final (pa, _) = _paNiveauSrc(m);
-                              final (pv, _) = _pvNiveauSrc(m);
-                              final qte = _qteNiveau(m);
+                              final ri = provider.medicaments.indexOf(m);
+                              final niv = _getNiveau(ri, m);
+                              final (pa, _) = _paNiveauSrc(m, niv);
+                              final (pv, _) = _pvNiveauSrc(m, niv);
+                              final qte = _qteNiveau(m, niv);
                               groupQte += qte;
                               groupPA += pa * qte;
                               groupPVT += pv * qte;
@@ -314,9 +313,10 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                               for (int j = 0; j < indices.length; j++) {
                                 final med = meds[indices[j]];
                                 final realIndex = provider.medicaments.indexOf(med);
-                                final (pa, paDirect) = _paNiveauSrc(med);
-                                final (pv, pvDirect) = _pvNiveauSrc(med);
-                                final qte = _qteNiveau(med);
+                                final niv = _getNiveau(realIndex, med);
+                                final (pa, paDirect) = _paNiveauSrc(med, niv);
+                                final (pv, pvDirect) = _pvNiveauSrc(med, niv);
+                                final qte = _qteNiveau(med, niv);
                                 final pvTotal = pv * qte;
                                 final ben = (pv - pa) * qte;
 
@@ -325,10 +325,30 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                                   cells: [
                                     const DataCell(Text('')),
                                     DataCell(
-                                      SizedBox(width: 110, child: Row(children: [
-                                        Text('  ↳ ', style: GoogleFonts.inter(fontSize: 10, color: Colors.deepPurple)),
-                                        Expanded(child: Text('Lot ${j + 1}', overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500, color: Colors.deepPurple))),
-                                      ])),
+                                      SizedBox(width: 110, child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Row(children: [
+                                            Text('  ↳ ', style: GoogleFonts.inter(fontSize: 10, color: Colors.deepPurple)),
+                                            Expanded(child: Text('Lot ${j + 1}', overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500, color: Colors.deepPurple))),
+                                          ]),
+                                          Wrap(spacing: 2, children: NiveauControle.values.where((n) => n.estApplicable(med.forme)).map((n) {
+                                            final sel = niv == n;
+                                            return GestureDetector(
+                                              onTap: () => setState(() => _niveaux[realIndex] = n),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
+                                                decoration: BoxDecoration(
+                                                  color: sel ? kPrimaryColor : Colors.grey.withAlpha(20),
+                                                  borderRadius: BorderRadius.circular(3),
+                                                ),
+                                                child: Text(n.labelPour(med.forme), style: GoogleFonts.inter(fontSize: 7, fontWeight: FontWeight.w600, color: sel ? Colors.white : kTextSecondary)),
+                                              ),
+                                            );
+                                          }).toList()),
+                                        ],
+                                      )),
                                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailMedicamentScreen(medicament: med, index: realIndex))),
                                     ),
                                     DataCell(Text(
@@ -360,9 +380,10 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                               // Un seul lot — affichage normal
                               final med = firstMed;
                               final realIndex = provider.medicaments.indexOf(med);
-                              final (pa, paDirect) = _paNiveauSrc(med);
-                              final (pv, pvDirect) = _pvNiveauSrc(med);
-                              final qte = _qteNiveau(med);
+                              final niv = _getNiveau(realIndex, med);
+                              final (pa, paDirect) = _paNiveauSrc(med, niv);
+                              final (pv, pvDirect) = _pvNiveauSrc(med, niv);
+                              final qte = _qteNiveau(med, niv);
                               final pvTotal = pv * qte;
                               final ben = (pv - pa) * qte;
 
@@ -370,7 +391,27 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                                 cells: [
                                   DataCell(Text('$num', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: kPrimaryColor))),
                                   DataCell(
-                                    SizedBox(width: 110, child: Text(med.nom, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: kPrimaryColor, decoration: TextDecoration.underline))),
+                                    SizedBox(width: 110, child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(med.nom, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: kPrimaryColor, decoration: TextDecoration.underline)),
+                                        Wrap(spacing: 2, children: NiveauControle.values.where((n) => n.estApplicable(med.forme)).map((n) {
+                                          final sel = niv == n;
+                                          return GestureDetector(
+                                            onTap: () => setState(() => _niveaux[realIndex] = n),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: sel ? kPrimaryColor : Colors.grey.withAlpha(20),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(n.labelPour(med.forme), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: sel ? Colors.white : kTextSecondary)),
+                                            ),
+                                          );
+                                        }).toList()),
+                                      ],
+                                    )),
                                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailMedicamentScreen(medicament: med, index: realIndex))),
                                   ),
                                   DataCell(Text(
@@ -428,15 +469,6 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
     );
   }
 
-  /// Calcule le numéro de lot pour un médicament à l'index donné
-  int _lotNumber(List<Medicament> meds, int index) {
-    final nom = meds[index].nom.toLowerCase();
-    int lot = 0;
-    for (int j = 0; j <= index; j++) {
-      if (meds[j].nom.toLowerCase() == nom) lot++;
-    }
-    return lot;
-  }
 
   Widget _chip(String text, Color color) {
     return Container(

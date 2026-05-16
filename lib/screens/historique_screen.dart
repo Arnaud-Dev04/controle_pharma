@@ -102,7 +102,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                     borderRadius: BorderRadius.circular(12),
                     onTap: () => _showControleDetails(context, controle, provider),
                     child: Padding(
-                      padding: const EdgeInsets.all(kPaddingM),
+                      padding: const EdgeInsets.all(kPaddingS),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -110,7 +110,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(8),
+                                padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
                                   color: controle.statut == 'termine'
                                       ? kSuccessColor.withAlpha(20)
@@ -124,10 +124,10 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                                   color: controle.statut == 'termine'
                                       ? kSuccessColor
                                       : kPrimaryColor,
-                                  size: 24,
+                                  size: 20,
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment:
@@ -182,7 +182,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
 
                           // Ligne 2 : Métriques
                           Row(
@@ -190,7 +190,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                               _buildMetric(
                                 Icons.medication_rounded,
                                 '${controle.nombreMedicaments}',
-                                'Médicaments',
+                                'Méd.',
                                 kPrimaryColor,
                               ),
                               _buildMetric(
@@ -212,30 +212,51 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                               _buildMetric(
                                 Icons.pie_chart_rounded,
                                 '${(controle.progressionControle * 100).toInt()}%',
-                                'Contrôlé',
+                                'Ctrl',
                                 kPrimaryColor,
                               ),
                             ],
                           ),
-
-                          const SizedBox(height: 8),
-                          // Indication visuelle pour cliquer
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.touch_app_rounded,
-                                  size: 14, color: kPrimaryColor.withAlpha(120)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Appuyez pour voir les détails',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: kPrimaryColor.withAlpha(120),
-                                  fontStyle: FontStyle.italic,
+                          // Bouton Quitter l'inventaire
+                          if (isActuel) ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Quitter l\'inventaire'),
+                                      content: const Text('Voulez-vous terminer cet inventaire ? Il sera sauvegardé dans l\'historique.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('Annuler'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () async {
+                                            await provider.terminerControle();
+                                            if (ctx.mounted) Navigator.pop(ctx);
+                                            if (context.mounted) setState(() {});
+                                          },
+                                          style: ElevatedButton.styleFrom(backgroundColor: kDangerColor),
+                                          child: const Text('Terminer', style: TextStyle(color: Colors.white)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.exit_to_app_rounded, size: 16),
+                                label: Text('Quitter l\'inventaire', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: kDangerColor,
+                                  side: const BorderSide(color: kDangerColor),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -378,7 +399,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                 children: [
                   // Handle bar
                   Container(
-                    margin: const EdgeInsets.only(top: 10),
+                    margin: const EdgeInsets.only(top: 8),
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
@@ -389,21 +410,21 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
 
                   // Header
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(kPaddingM, kPaddingM, kPaddingM, 0),
+                    padding: const EdgeInsets.fromLTRB(kPaddingS, kPaddingS, kPaddingS, 0),
                     child: Column(
                       children: [
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [kPrimaryColor, kPrimaryLightColor],
                                 ),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(Icons.fact_check_rounded,
-                                  color: Colors.white, size: 22),
+                                  color: Colors.white, size: 18),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -443,9 +464,9 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
 
-                        // Sélecteur de niveau de conditionnement
+                        // Sélecteur de niveau
                         Row(
                           children: NiveauControle.values.map((n) {
                             final selected = niveau == n;
@@ -454,8 +475,8 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                                 onTap: () => setSheetState(() => niveau = n),
                                 child: Container(
                                   margin: EdgeInsets.only(
-                                      right: n != NiveauControle.carton ? 6 : 0),
-                                  padding: const EdgeInsets.symmetric(vertical: 7),
+                                      right: n != NiveauControle.carton ? 4 : 0),
+                                  padding: const EdgeInsets.symmetric(vertical: 5),
                                   decoration: BoxDecoration(
                                     color: selected ? kPrimaryColor : Colors.white,
                                     borderRadius: BorderRadius.circular(8),
@@ -489,7 +510,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
 
                         // Résumé cartes
                         Row(
@@ -519,7 +540,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   const Divider(height: 1),
 
                   // Table header
@@ -530,6 +551,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                     child: Row(
                       children: [
                         _headerCell('Médicament', flex: 3),
+                        _headerCell('Date', flex: 2),
                         _headerCell('Vendus', flex: 1),
                         _headerCell('Restant', flex: 1),
                         _headerCell('P.A\n(${niveau.label})', flex: 2),
@@ -562,7 +584,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
 
                   // Footer totaux
                   Container(
-                    padding: const EdgeInsets.all(kPaddingM),
+                    padding: const EdgeInsets.symmetric(horizontal: kPaddingS, vertical: kPaddingXS),
                     decoration: BoxDecoration(
                       color: kPrimaryColor.withAlpha(10),
                       border: Border(
@@ -631,6 +653,18 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                       fontSize: 9, color: kTextSecondary),
                 ),
               ],
+            ),
+          ),
+          // Date
+          Expanded(
+            flex: 2,
+            child: Center(
+              child: Text(
+                m.dateEntreeStock != null
+                    ? '${m.dateEntreeStock!.day.toString().padLeft(2, '0')}/${m.dateEntreeStock!.month.toString().padLeft(2, '0')}/${m.dateEntreeStock!.year.toString().substring(2)}'
+                    : '-',
+                style: GoogleFonts.inter(fontSize: 9, color: kTextSecondary),
+              ),
             ),
           ),
           // Vendus

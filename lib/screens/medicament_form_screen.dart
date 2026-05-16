@@ -237,8 +237,14 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
       final c = int.tryParse(_cartonsCtrl.text) ?? 1;
       final b = int.tryParse(_boitesCtrl.text) ?? 1;
       final p = int.tryParse(_plaquettesCtrl.text) ?? 1;
-      final u = int.tryParse(_unitesCtrl.text) ?? 0;
-      return c * b * p * u;
+      if (_forme.hasNiveauIntermediaire) {
+        // Comprimés/gélules : cartons × boîtes × plaquettes × unités
+        final u = int.tryParse(_unitesCtrl.text) ?? 0;
+        return c * b * p * u;
+      } else {
+        // Sirops/pommades : cartons × boîtes × flacons (p = flacons par boîte)
+        return c * b * p;
+      }
     }
     return int.tryParse(_qteDirecteCtrl.text) ?? 0;
   }
@@ -576,26 +582,37 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
             ],
           ),
           const SizedBox(height: kPaddingS),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPackagingField(
-                  controller: _plaquettesCtrl,
-                  label: 'Plaq./Boîte',
-                  icon: Icons.view_column_rounded,
+          if (_forme.hasNiveauIntermediaire) ...[
+            // Comprimés, gélules, suppositoires : 4 niveaux
+            Row(
+              children: [
+                Expanded(
+                  child: _buildPackagingField(
+                    controller: _plaquettesCtrl,
+                    label: '${_forme.intermediaireLabel}s/Boîte',
+                    icon: Icons.view_column_rounded,
+                  ),
                 ),
-              ),
-              const SizedBox(width: kPaddingS),
-              Expanded(
-                child: _buildPackagingField(
-                  controller: _unitesCtrl,
-                  label: 'Unités/Plaq.',
-                  icon: Icons.circle_outlined,
-                  isLast: true,
+                const SizedBox(width: kPaddingS),
+                Expanded(
+                  child: _buildPackagingField(
+                    controller: _unitesCtrl,
+                    label: '${_forme.uniteLabel}s/${_forme.intermediaireLabel.substring(0, 4)}.',
+                    icon: Icons.circle_outlined,
+                    isLast: true,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ] else ...[
+            // Sirops, pommades, injectables : 3 niveaux (pas de plaquette)
+            _buildPackagingField(
+              controller: _plaquettesCtrl,
+              label: '${_forme.uniteLabel}s/Boîte',
+              icon: Icons.medication_liquid_rounded,
+              isLast: true,
+            ),
+          ],
           const SizedBox(height: kPaddingM),
           // Résultat du calcul
           AnimatedContainer(
@@ -628,7 +645,7 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
                   ),
                 ),
                 Text(
-                  '$_quantiteTotale unités',
+                  '$_quantiteTotale ${_forme.uniteLabel.toLowerCase()}s',
                   style: GoogleFonts.inter(
                     fontSize: kFontSizeL,
                     fontWeight: FontWeight.w700,
@@ -689,16 +706,17 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
           runSpacing: 4,
           children: [
             _buildNiveauChip(
-              'Comprimé',
+              _forme.uniteLabel,
               _showPrixComprime,
               (v) => setState(() => _showPrixComprime = v),
             ),
             if (_modeDetaille) ...[
-              _buildNiveauChip(
-                'Plaquette',
-                _showPrixPlaquette,
-                (v) => setState(() => _showPrixPlaquette = v),
-              ),
+              if (_forme.hasNiveauIntermediaire)
+                _buildNiveauChip(
+                  _forme.intermediaireLabel,
+                  _showPrixPlaquette,
+                  (v) => setState(() => _showPrixPlaquette = v),
+                ),
               _buildNiveauChip(
                 'Boîte',
                 _showPrixBoite,
@@ -717,23 +735,23 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
           const SizedBox(height: kPaddingS),
           Row(children: [
             Expanded(
-              child: _buildPriceField(_puCtrl, 'PA Comprimé', _puFocus),
+              child: _buildPriceField(_puCtrl, 'PA ${_forme.uniteLabel}', _puFocus),
             ),
             const SizedBox(width: kPaddingS),
             Expanded(
-              child: _buildPriceField(_pvCtrl, 'PV Comprimé', _pvFocus),
+              child: _buildPriceField(_pvCtrl, 'PV ${_forme.uniteLabel}', _pvFocus),
             ),
           ]),
         ],
-        if (_showPrixPlaquette) ...[          
+        if (_showPrixPlaquette && _forme.hasNiveauIntermediaire) ...[          
           const SizedBox(height: kPaddingS),
           Row(children: [
             Expanded(
-              child: _buildPriceField(_paPlaquetteCtrl, 'PA Plaquette'),
+              child: _buildPriceField(_paPlaquetteCtrl, 'PA ${_forme.intermediaireLabel}'),
             ),
             const SizedBox(width: kPaddingS),
             Expanded(
-              child: _buildPriceField(_pvPlaquetteCtrl, 'PV Plaquette'),
+              child: _buildPriceField(_pvPlaquetteCtrl, 'PV ${_forme.intermediaireLabel}'),
             ),
           ]),
         ],
@@ -849,19 +867,32 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
   void _autoCalculerPrix() {
     final pu = double.tryParse(_puCtrl.text) ?? 0;
     final pv = double.tryParse(_pvCtrl.text) ?? 0;
-    final uPlq = int.tryParse(_unitesCtrl.text) ?? 1;
     final plqBte = int.tryParse(_plaquettesCtrl.text) ?? 1;
     final bteCrt = int.tryParse(_boitesCtrl.text) ?? 1;
 
-    if (pu > 0) {
-      _paPlaquetteCtrl.text = (pu * uPlq).toStringAsFixed(0);
-      _paBoiteCtrl.text = (pu * uPlq * plqBte).toStringAsFixed(0);
-      _paCartonCtrl.text = (pu * uPlq * plqBte * bteCrt).toStringAsFixed(0);
-    }
-    if (pv > 0) {
-      _pvPlaquetteCtrl.text = (pv * uPlq).toStringAsFixed(0);
-      _pvBoiteCtrl.text = (pv * uPlq * plqBte).toStringAsFixed(0);
-      _pvCartonCtrl.text = (pv * uPlq * plqBte * bteCrt).toStringAsFixed(0);
+    if (_forme.hasNiveauIntermediaire) {
+      // Comprimés : unité → plaquette → boîte → carton
+      final uPlq = int.tryParse(_unitesCtrl.text) ?? 1;
+      if (pu > 0) {
+        _paPlaquetteCtrl.text = (pu * uPlq).toStringAsFixed(0);
+        _paBoiteCtrl.text = (pu * uPlq * plqBte).toStringAsFixed(0);
+        _paCartonCtrl.text = (pu * uPlq * plqBte * bteCrt).toStringAsFixed(0);
+      }
+      if (pv > 0) {
+        _pvPlaquetteCtrl.text = (pv * uPlq).toStringAsFixed(0);
+        _pvBoiteCtrl.text = (pv * uPlq * plqBte).toStringAsFixed(0);
+        _pvCartonCtrl.text = (pv * uPlq * plqBte * bteCrt).toStringAsFixed(0);
+      }
+    } else {
+      // Sirops/pommades : unité (flacon) → boîte → carton (pas de plaquette)
+      if (pu > 0) {
+        _paBoiteCtrl.text = (pu * plqBte).toStringAsFixed(0);
+        _paCartonCtrl.text = (pu * plqBte * bteCrt).toStringAsFixed(0);
+      }
+      if (pv > 0) {
+        _pvBoiteCtrl.text = (pv * plqBte).toStringAsFixed(0);
+        _pvCartonCtrl.text = (pv * plqBte * bteCrt).toStringAsFixed(0);
+      }
     }
     setState(() {});
   }
@@ -905,10 +936,10 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
           ),
           const SizedBox(height: 12),
           if (_showPrixComprime)
-            _buildMargeRow('Comprimé', _marge, _margePercent, color),
-          if (_showPrixPlaquette)
+            _buildMargeRow(_forme.uniteLabel, _marge, _margePercent, color),
+          if (_showPrixPlaquette && _forme.hasNiveauIntermediaire)
             _buildMargeRow(
-              'Plaquette',
+              _forme.intermediaireLabel,
               _margeNiveau(_paPlaquetteCtrl, _pvPlaquetteCtrl),
               _margePctNiveau(_paPlaquetteCtrl, _pvPlaquetteCtrl),
               color,
@@ -1124,15 +1155,16 @@ class _MedicamentFormScreenState extends State<MedicamentFormScreen>
       plaquettesParBoite: _modeDetaille
           ? int.tryParse(_plaquettesCtrl.text)
           : null,
-      unitesParPlaquette: _modeDetaille
+      // Pour les formes sans plaquette (sirop, pommade…), pas de subdivision
+      unitesParPlaquette: (_modeDetaille && _forme.hasNiveauIntermediaire)
           ? int.tryParse(_unitesCtrl.text)
           : null,
       prixAchatCarton: _showPrixCarton ? double.tryParse(_paCartonCtrl.text) : null,
       prixAchatBoite: _showPrixBoite ? double.tryParse(_paBoiteCtrl.text) : null,
-      prixAchatPlaquette: _showPrixPlaquette ? double.tryParse(_paPlaquetteCtrl.text) : null,
+      prixAchatPlaquette: (_showPrixPlaquette && _forme.hasNiveauIntermediaire) ? double.tryParse(_paPlaquetteCtrl.text) : null,
       prixVenteCarton: _showPrixCarton ? double.tryParse(_pvCartonCtrl.text) : null,
       prixVenteBoite: _showPrixBoite ? double.tryParse(_pvBoiteCtrl.text) : null,
-      prixVentePlaquette: _showPrixPlaquette ? double.tryParse(_pvPlaquetteCtrl.text) : null,
+      prixVentePlaquette: (_showPrixPlaquette && _forme.hasNiveauIntermediaire) ? double.tryParse(_pvPlaquetteCtrl.text) : null,
     );
   }
 
