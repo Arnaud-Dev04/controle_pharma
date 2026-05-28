@@ -204,7 +204,9 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
             }
           }
 
-          return Column(
+          return SafeArea(
+            top: false,
+            child: Column(
             children: [
 
               // Tableau header
@@ -271,7 +273,7 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
                         child: ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: kPaddingXS),
                           itemCount: items.length,
-                          separatorBuilder: (_, __) => Divider(height: 1, color: kBorderColor),
+                          separatorBuilder: (_, _) => Divider(height: 1, color: kBorderColor),
                           itemBuilder: (context, itemIdx) {
                             final item = items[itemIdx];
 
@@ -524,9 +526,7 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
               // Totaux
               Flexible(
                 child: SingleChildScrollView(
-                  child: SafeArea(
-                    top: false,
-                    child: Container(
+                  child: Container(
                       padding: const EdgeInsets.all(kPaddingS),
                       decoration: BoxDecoration(
                         color: kPrimaryColor.withAlpha(15),
@@ -628,8 +628,8 @@ class _ControleSimplifieScreenState extends State<ControleSimplifieScreen> {
                 ),
               ),
             ),
-          ),
             ],
+          ),
           );
         },
       ),

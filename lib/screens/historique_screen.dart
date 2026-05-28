@@ -573,7 +573,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: kPaddingXS),
                             itemCount: meds.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 Divider(height: 1, color: kBorderColor),
                             itemBuilder: (context, i) {
                               final m = meds[i];

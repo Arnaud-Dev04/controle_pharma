@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.controlpharma" "\0"
-            VALUE "FileDescription", "controle_pharma" "\0"
+            VALUE "CompanyName", "ControlPharma" "\0"
+            VALUE "FileDescription", "Contrôle Pharma - Gestion d'inventaire pharmaceutique" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "controle_pharma" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.controlpharma. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 ControlPharma. Tous droits réservés." "\0"
             VALUE "OriginalFilename", "controle_pharma.exe" "\0"
-            VALUE "ProductName", "controle_pharma" "\0"
+            VALUE "ProductName", "Contrôle Pharma" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

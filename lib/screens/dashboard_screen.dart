@@ -5,18 +5,15 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/pharmacie.dart';
-import '../models/medicament.dart';
 import '../providers/controle_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/export_service.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
-import '../widgets/search_bar_widget.dart';
 import 'medicament_form_screen.dart';
 import 'vente_screen.dart';
 import 'tableau_controle_screen.dart';
@@ -24,7 +21,6 @@ import 'historique_screen.dart';
 import 'pharmacie_form_screen.dart';
 import 'controle_simplifie_screen.dart';
 import 'liste_medicaments_screen.dart';
-import 'detail_medicament_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   /// Pharmacie à laquelle ce dashboard est scopé
@@ -40,7 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
-  String _searchQuery = '';
+
 
   @override
   void initState() {
@@ -69,9 +65,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Scaffold(
       body: Consumer<ControleProvider>(
         builder: (context, provider, _) {
-          final filteredMeds = _searchQuery.isEmpty
-              ? provider.medicaments
-              : provider.rechercherMedicament(_searchQuery);
+
 
           return FadeTransition(
             opacity: _fadeAnimation,
@@ -389,7 +383,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  SliverToBoxAdapter(child: SizedBox(height: 80 + MediaQuery.of(context).viewPadding.bottom)),
                 ] else ...[
                   // Chargement — le contrôle est auto-créé
                   SliverFillRemaining(
@@ -568,126 +562,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   // ============================================================
   // 📦 RÉAPPROVISIONNEMENT
   // ============================================================
-  void _showReapproDialog(BuildContext context, ControleProvider provider, Medicament med, int index) {
-    final qteCtrl = TextEditingController();
-    final paCtrl = TextEditingController(text: med.prixUnitaire.toStringAsFixed(0));
-    final pvCtrl = TextEditingController(text: med.prixVente.toStringAsFixed(0));
-    bool updatePrix = false;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              const Icon(Icons.add_box_rounded, color: kPrimaryColor),
-              const SizedBox(width: 8),
-              Expanded(child: Text('Réapprovisionner', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: kFontSizeL))),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(med.nom, style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: kPrimaryColor)),
-              const SizedBox(height: 4),
-              Text('Stock actuel : ${med.quantiteInitiale} unités', style: GoogleFonts.inter(fontSize: kFontSizeS, color: kTextSecondary)),
-              const SizedBox(height: kPaddingM),
-              TextFormField(
-                controller: qteCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(labelText: 'Quantité à ajouter', suffixText: 'unités', prefixIcon: Icon(Icons.add_rounded)),
-                autofocus: true,
-              ),
-              const SizedBox(height: kPaddingS),
-              CheckboxListTile(
-                value: updatePrix,
-                onChanged: (v) => setDialogState(() => updatePrix = v ?? false),
-                title: Text('Mettre à jour les prix', style: GoogleFonts.inter(fontSize: kFontSizeS)),
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
-              if (updatePrix) ...[
-                Row(children: [
-                  Expanded(child: TextFormField(
-                    controller: paCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Nouveau PA', suffixText: 'FBu', isDense: true),
-                  )),
-                  const SizedBox(width: kPaddingS),
-                  Expanded(child: TextFormField(
-                    controller: pvCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Nouveau PV', suffixText: 'FBu', isDense: true),
-                  )),
-                ]),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Annuler', style: GoogleFonts.inter(color: kTextSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final qte = int.tryParse(qteCtrl.text);
-                if (qte == null || qte <= 0) return;
-                provider.reapprovisionner(
-                  index,
-                  quantiteAjoutee: qte,
-                  nouveauPA: updatePrix ? double.tryParse(paCtrl.text) : null,
-                  nouveauPV: updatePrix ? double.tryParse(pvCtrl.text) : null,
-                );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('+$qte unités ajoutées à ${med.nom} ✓'),
-                    backgroundColor: kSuccessColor,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                );
-              },
-              child: const Text('Confirmer'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  void _confirmDelete(BuildContext context, ControleProvider provider, Medicament med, int index) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.warning_rounded, color: kDangerColor),
-            const SizedBox(width: 8),
-            Text('Supprimer', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          ],
-        ),
-        content: Text('Supprimer "${med.nom}" ?', style: GoogleFonts.inter()),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Annuler', style: GoogleFonts.inter(color: kTextSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              provider.supprimerMedicament(index);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: kDangerColor),
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
-    );
-  }
+
 }

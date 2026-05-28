@@ -76,19 +76,6 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
     return div > 0 ? stock ~/ div : 0;
   }
 
-  /// Quantité initiale au niveau choisi (toujours quantiteInitiale)
-  int _qteInitNiveau(Medicament med, NiveauControle niveau) {
-    final u = med.unitesParPlaquette ?? 1;
-    final p = med.plaquettesParBoite ?? 1;
-    final b = med.boitesParCarton ?? 1;
-    final div = switch (niveau) {
-      NiveauControle.comprime  => 1,
-      NiveauControle.plaquette => u,
-      NiveauControle.boite     => u * p,
-      NiveauControle.carton    => u * p * b,
-    };
-    return div > 0 ? med.quantiteInitiale ~/ div : 0;
-  }
 
   double _bestPA(Medicament med) {
     if (med.prixUnitaire > 0) return med.prixUnitaire;
@@ -222,6 +209,9 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).padding.bottom + 32,
+                    ),
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(kPrimaryColor.withAlpha(20)),
                       headingTextStyle: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: kPrimaryDarkColor),
@@ -265,7 +255,7 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                             num++;
 
                             // Calculer les totaux du groupe
-                            double groupPA = 0, groupPVT = 0, groupBen = 0;
+                            double groupPVT = 0, groupBen = 0;
                             int groupQte = 0;
                             for (final idx in indices) {
                               final m = meds[idx];
@@ -275,7 +265,7 @@ class _ListeMedicamentsScreenState extends State<ListeMedicamentsScreen> {
                               final (pv, _) = _pvNiveauSrc(m, niv);
                               final qte = _qteNiveau(m, niv);
                               groupQte += qte;
-                              groupPA += pa * qte;
+
                               groupPVT += pv * qte;
                               groupBen += (pv - pa) * qte;
                             }

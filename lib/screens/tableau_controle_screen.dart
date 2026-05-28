@@ -313,7 +313,9 @@ class _TableauControleScreenState extends State<TableauControleScreen> {
             }
           }
 
-          return Column(children: [
+          return SafeArea(
+            top: false,
+            child: Column(children: [
             // En-tête grand totaux
             Container(
               width: double.infinity,
@@ -438,7 +440,8 @@ class _TableauControleScreenState extends State<TableauControleScreen> {
                 ],
               )),
             )),
-          ]);
+          ]),
+          );
         },
       ),
     );
